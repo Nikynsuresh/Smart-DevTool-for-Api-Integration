@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/data:/workspace/data
+    environment:
+      - PORT=8000
+      - DATABASE_URL=sqlite:///./data/app.db
+      - CHROMA_PERSIST_DIR=/workspace/data/chroma
+      - MAX_CRAWL_PAGES=15
+      # Provide API keys below or in a local .env file in the backend folder
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    restart: always
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NODE_ENV=production
+    depends_on:
+      - backend
+    restart: always
