@@ -2,7 +2,7 @@ import os
 import logging
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -105,7 +105,7 @@ class LLMService:
             if msg["role"] == "user":
                 messages.append(HumanMessage(content=msg["content"]))
             elif msg["role"] == "assistant":
-                messages.append(SystemMessage(content=msg["content"])) # or AIMessage
+                messages.append(AIMessage(content=msg["content"]))
                 
         # Append latest user message
         messages.append(HumanMessage(content=new_message))

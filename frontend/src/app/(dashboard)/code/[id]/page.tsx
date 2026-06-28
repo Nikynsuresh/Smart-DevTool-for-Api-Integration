@@ -14,7 +14,6 @@ import {
   BookOpen, 
   Cpu, 
   Sparkles,
-  ChevronRight,
   ShieldCheck,
   AlertCircle
 } from "lucide-react";
@@ -78,7 +77,7 @@ export default function CodePage() {
             console.error("Failed to parse endpoints_json:", e);
           }
         }
-      } catch (err: any) {
+      } catch (err) {
         console.error(err);
         setError("Failed to load integration data.");
       } finally {
@@ -110,9 +109,9 @@ export default function CodePage() {
       a.click();
       a.remove();
       window.URL.revokeObjectURL(blobUrl);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Download failed:", err);
-      alert(err.message || "An error occurred while downloading the file.");
+      alert(err instanceof Error ? err.message : "An error occurred while downloading the file.");
     } finally {
       setExportingState(false);
     }
@@ -434,28 +433,46 @@ export default function CodePage() {
             {/* Guide */}
             <TabsContent value="guide" className="flex-1 m-0 p-0 overflow-hidden focus-visible:ring-0 min-h-0">
               <ScrollArea className="h-full">
-                <div className="p-8 max-w-3xl mx-auto space-y-6 text-slate-300 text-xs leading-relaxed prose prose-invert prose-indigo">
+                <div className="p-8 max-w-3xl mx-auto space-y-4 text-slate-300 text-xs leading-relaxed prose prose-invert prose-indigo">
                   <div className="flex items-center gap-2 pb-4 border-b border-[#141520] mb-4 shrink-0">
                     <BookOpen className="h-4.5 w-4.5 text-indigo-400" />
                     <h2 className="text-md font-bold text-white">Integration Setup Guide</h2>
                   </div>
-                  {/* Clean line renders for guide markdown */}
-                  {integration.integration_steps?.split("\n").map((line, index) => {
-                    if (line.trim().startsWith("#")) {
-                      const level = line.split("#").length - 1;
+                  {parseMarkdownToBlocks(integration.integration_steps || "").map((block, idx) => {
+                    if (block.type === "heading") {
+                      const level = block.level || 1;
                       return (
-                        <h3 key={index} className={`font-bold text-white mt-6 ${level === 2 ? "text-sm" : "text-xs border-b border-[#141520]/40 pb-1"}`}>
-                          {line.replace(/#/g, "").trim()}
+                        <h3 
+                          key={idx} 
+                          className={`font-bold text-white mt-6 ${
+                            level === 1 ? "text-base border-b border-[#141520] pb-1.5" : level === 2 ? "text-sm" : "text-xs"
+                          }`}
+                        >
+                          {block.content}
                         </h3>
                       );
                     }
-                    if (line.trim().startsWith("-") || line.trim().startsWith("*")) {
-                      return <li key={index} className="ml-4 list-disc mt-1">{line.replace(/^[-*]\s*/, "")}</li>;
+                    if (block.type === "list_item") {
+                      return (
+                        <li key={idx} className="ml-4 list-disc mt-1 text-slate-300">
+                          {block.content}
+                        </li>
+                      );
                     }
-                    if (line.trim().startsWith("```")) {
-                      return null; // Skip raw tags to preserve simple text flow
+                    if (block.type === "code") {
+                      return (
+                        <CodeBlockContainer 
+                          key={idx} 
+                          content={block.content} 
+                          language={block.language || ""} 
+                        />
+                      );
                     }
-                    return <p key={index} className="mt-2.5">{line}</p>;
+                    return (
+                      <p key={idx} className="mt-2 text-slate-300">
+                        {block.content}
+                      </p>
+                    );
                   })}
                 </div>
               </ScrollArea>
@@ -501,6 +518,117 @@ export default function CodePage() {
           </Card>
         </div>
       )}
+    </div>
+  );
+}
+
+interface MarkdownBlock {
+  type: "heading" | "list_item" | "code" | "paragraph";
+  level?: number;
+  language?: string;
+  content: string;
+}
+
+function parseMarkdownToBlocks(text: string): MarkdownBlock[] {
+  if (!text) return [];
+  const lines = text.split("\n");
+  const blocks: MarkdownBlock[] = [];
+  let inCodeBlock = false;
+  let currentCodeContent: string[] = [];
+  let currentCodeLanguage = "";
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    if (line.trim().startsWith("```")) {
+      if (inCodeBlock) {
+        blocks.push({
+          type: "code",
+          language: currentCodeLanguage,
+          content: currentCodeContent.join("\n")
+        });
+        inCodeBlock = false;
+        currentCodeContent = [];
+        currentCodeLanguage = "";
+      } else {
+        inCodeBlock = true;
+        currentCodeLanguage = line.trim().substring(3).trim();
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      currentCodeContent.push(line);
+      continue;
+    }
+
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    if (trimmed.startsWith("#")) {
+      const match = trimmed.match(/^(#+)\s*(.*)$/);
+      if (match) {
+        blocks.push({
+          type: "heading",
+          level: match[1].length,
+          content: match[2].trim()
+        });
+        continue;
+      }
+    }
+
+    if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+      blocks.push({
+        type: "list_item",
+        content: trimmed.substring(2).trim()
+      });
+      continue;
+    }
+
+    blocks.push({
+      type: "paragraph",
+      content: trimmed
+    });
+  }
+
+  if (inCodeBlock && currentCodeContent.length > 0) {
+    blocks.push({
+      type: "code",
+      language: currentCodeLanguage,
+      content: currentCodeContent.join("\n")
+    });
+  }
+
+  return blocks;
+}
+
+function CodeBlockContainer({ content, language }: { content: string; language: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <div className="my-4 rounded-xl overflow-hidden border border-[#181926] bg-[#040508] relative group">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-[#141520] bg-[#08090f]">
+        <span className="text-[10px] uppercase font-extrabold text-slate-500 font-mono">
+          {language || "code"}
+        </span>
+        <Button
+          onClick={handleCopy}
+          size="sm"
+          className="h-6 px-2.5 bg-[#12131f] hover:bg-[#1a1b2b] text-[10px] text-slate-400 hover:text-white rounded-md border border-[#1f202e] gap-1"
+        >
+          {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3 text-slate-400" />}
+          {copied ? "Copied" : "Copy"}
+        </Button>
+      </div>
+      <div className="p-4 overflow-x-auto font-mono text-[11px] text-indigo-200/90 leading-relaxed">
+        <pre>{content}</pre>
+      </div>
     </div>
   );
 }

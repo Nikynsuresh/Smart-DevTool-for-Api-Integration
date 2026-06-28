@@ -13,47 +13,51 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/integrations", tags=["Integrations"])
 
 async def run_api_analysis_pipeline(integration_id: int, db_session_factory):
-    """Background task running the scraper, RAG indexer, and code wrapper generator."""
-    # Obtain a fresh DB session for the background thread
+    """Background task running the scraper, RAG indexer, and code wrapper generator asynchronously."""
+    # Obtain a fresh DB session for the background execution
     db = db_session_factory()
-    integration = db.query(Integration).filter(Integration.id == integration_id).first()
+    integration = await asyncio.to_thread(
+        lambda: db.query(Integration).filter(Integration.id == integration_id).first()
+    )
     if not integration:
-        db.close()
+        await asyncio.to_thread(db.close)
         return
 
     async def update_progress(progress: int, status_msg: str):
-        """Helper to write status and progress logs to SQLite."""
-        # Refresh inside transaction
-        db.refresh(integration)
-        integration.progress = progress
-        integration.status = status_msg
-        db.commit()
+        """Helper to write status and progress logs to SQLite asynchronously."""
+        def sync_update():
+            db.refresh(integration)
+            integration.progress = progress
+            integration.status = status_msg
+            db.commit()
+        await asyncio.to_thread(sync_update)
         logger.info(f"Integration {integration_id} progress: {progress}% - {status_msg}")
 
     try:
         await update_progress(5, "Initializing scraper browser...")
         
-        # 1. Scrape Pages
+        # 1. Scrape Pages asynchronously
         scraper = DocumentationScraper()
         pages = await scraper.crawl(integration.url, progress_callback=update_progress)
         
         if not pages:
             raise ValueError("No pages could be crawled from the provided URL. Ensure the URL is accessible.")
 
-        # 2. RAG Chunking & Storing
+        # 2. RAG Chunking & Storing in a worker thread
         await update_progress(40, "Vectorizing scraped content...")
         try:
-            rag = RAGPipeline()
-            # Clean any old vectors first
-            rag.clear_integration_vectors(integration_id)
-            
-            def rag_callback(pct, msg):
-                # Run async callback synchronously
-                integration.progress = pct
-                integration.status = msg
-                db.commit()
+            def run_rag():
+                rag = RAGPipeline()
+                rag.clear_integration_vectors(integration_id)
                 
-            rag.process_and_store(integration_id, pages, progress_callback=rag_callback)
+                def rag_callback(pct, msg):
+                    integration.progress = pct
+                    integration.status = msg
+                    db.commit()
+                    
+                rag.process_and_store(integration_id, pages, progress_callback=rag_callback)
+            
+            await asyncio.to_thread(run_rag)
         except Exception as rag_err:
             logger.warning(f"RAG Vectorization skipped/failed: {rag_err}. Proceeding with SDK generation.")
 
@@ -69,39 +73,44 @@ async def run_api_analysis_pipeline(integration_id: int, db_session_factory):
             pages=pages
         )
 
-        # Update integration values
-        integration.auth_summary = results["auth_summary"]
-        integration.endpoints_json = results["endpoints_json"]
-        integration.sdk_recommendation = results["sdk_recommendation"]
-        integration.integration_steps = results["integration_steps"]
-        integration.generated_code = results["generated_code"]
-        integration.sample_requests = results["sample_requests"]
-        integration.sample_responses = results["sample_responses"]
-        
-        # Auto-detect subscription from scraped pages
-        try:
-            from app.services.extractor import detect_authentication
-            combined_text = "\n\n".join([p["content"] for p in pages])
-            detected_auth = detect_authentication(combined_text)
-            if detected_auth.get("requires_subscription"):
-                integration.requires_subscription = True
-        except Exception as ex:
-            logger.warning(f"Subscription auto-detect failed: {ex}")
-        
-        integration.progress = 100
-        integration.status = "completed"
-        db.commit()
+        # Update integration values in database asynchronously
+        def sync_finalize():
+            integration.auth_summary = results["auth_summary"]
+            integration.endpoints_json = results["endpoints_json"]
+            integration.sdk_recommendation = results["sdk_recommendation"]
+            integration.integration_steps = results["integration_steps"]
+            integration.generated_code = results["generated_code"]
+            integration.sample_requests = results["sample_requests"]
+            integration.sample_responses = results["sample_responses"]
+            
+            # Auto-detect subscription from scraped pages
+            try:
+                from app.services.extractor import detect_authentication
+                combined_text = "\n\n".join([p["content"] for p in pages])
+                detected_auth = detect_authentication(combined_text)
+                if detected_auth.get("requires_subscription"):
+                    integration.requires_subscription = True
+            except Exception as ex:
+                logger.warning(f"Subscription auto-detect failed: {ex}")
+            
+            integration.progress = 100
+            integration.status = "completed"
+            db.commit()
+            
+        await asyncio.to_thread(sync_finalize)
         logger.info(f"Integration {integration_id} completed successfully!")
 
     except Exception as e:
         logger.exception(f"Error executing pipeline for integration {integration_id}: {e}")
-        db.refresh(integration)
-        integration.status = "failed"
-        integration.progress = 100
-        integration.error_message = str(e)
-        db.commit()
+        def sync_fail():
+            db.refresh(integration)
+            integration.status = "failed"
+            integration.progress = 100
+            integration.error_message = str(e)
+            db.commit()
+        await asyncio.to_thread(sync_fail)
     finally:
-        db.close()
+        await asyncio.to_thread(db.close)
 
 @router.post("", response_model=IntegrationResponse)
 async def create_integration(
@@ -110,20 +119,23 @@ async def create_integration(
     db: Session = Depends(get_db)
 ):
     """Start analyzing an API documentation URL."""
-    new_integration = Integration(
-        url=payload.url,
-        use_case=payload.use_case,
-        language=payload.language,
-        requires_subscription=payload.requires_subscription,
-        status="pending",
-        progress=0
-    )
-    db.add(new_integration)
-    db.commit()
-    db.refresh(new_integration)
+    def sync_create_entry():
+        new_int = Integration(
+            url=payload.url,
+            use_case=payload.use_case,
+            language=payload.language,
+            requires_subscription=payload.requires_subscription,
+            status="pending",
+            progress=0
+        )
+        db.add(new_int)
+        db.commit()
+        db.refresh(new_int)
+        return new_int
+
+    new_integration = await asyncio.to_thread(sync_create_entry)
     
     # Run the scraping/embedding/LLM pipeline in background
-    # We pass a session factory call wrapper to handle database connection in background safely
     from app.database import SessionLocal
     background_tasks.add_task(run_api_analysis_pipeline, new_integration.id, SessionLocal)
     

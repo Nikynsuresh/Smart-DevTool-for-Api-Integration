@@ -7,22 +7,17 @@ import {
   Send, 
   Bot, 
   User, 
-  Terminal, 
   ArrowLeft, 
   Loader2, 
   Copy, 
   Check, 
   MessageSquare,
-  Globe,
-  Sparkles,
   AlertCircle,
   Code2,
   Cpu
 } from "lucide-react";
 import { getIntegration, getChatHistory, sendChatMessage, Integration, ChatMessage } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 
 const SUGGESTED_PROMPTS = [
@@ -30,6 +25,10 @@ const SUGGESTED_PROMPTS = [
   "Show me the core endpoints and methods.",
   "Give me an example of handling error exceptions.",
 ];
+
+function getTempId(offset = 0) {
+  return Date.now() + offset;
+}
 
 export default function ChatPage() {
   const { id } = useParams() as { id: string };
@@ -80,7 +79,7 @@ export default function ChatPage() {
     
     // Optimistically add user message to list
     const tempUserMsg: ChatMessage = {
-      id: Date.now(),
+      id: getTempId(),
       role: "user",
       content: trimmed,
       created_at: new Date().toISOString()
@@ -101,7 +100,7 @@ export default function ChatPage() {
       console.error(err);
       // Show warning/error message in chat
       const tempErrorMsg: ChatMessage = {
-        id: Date.now() + 1,
+        id: getTempId(1),
         role: "assistant",
         content: "⚠️ Sorry, I failed to process that request. Please verify that the FastAPI backend is running and active.",
         created_at: new Date().toISOString()

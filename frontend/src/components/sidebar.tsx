@@ -10,7 +10,6 @@ import {
   Compass, 
   History, 
   Cpu, 
-  ChevronRight,
   Code2
 } from "lucide-react";
 import { listIntegrations, Integration } from "@/lib/api";
@@ -181,7 +180,7 @@ export function Sidebar() {
           <span className="text-[11px] font-bold text-indigo-400">DEV</span>
         </div>
         <div className="min-w-0">
-          <p className="text-[12px] font-semibold text-slate-200 truncate">Sandbox User</p>
+          <p className="text-[12px] font-semibold text-slate-200 truncate">User</p>
           <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-medium">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
             Backend Connected

@@ -54,9 +54,11 @@ export default function AnalyzePage() {
       const urlParam = params.get("url");
       const useCaseParam = params.get("usecase");
       const langParam = params.get("language");
-      if (urlParam) setUrl(urlParam);
-      if (useCaseParam) setUseCase(useCaseParam);
-      if (langParam) setLanguage(langParam);
+      setTimeout(() => {
+        if (urlParam) setUrl(urlParam);
+        if (useCaseParam) setUseCase(useCaseParam);
+        if (langParam) setLanguage(langParam);
+      }, 0);
     }
   }, []);
 
@@ -96,9 +98,9 @@ export default function AnalyzePage() {
         requiresSubscription
       );
       setActiveIntegration(integration);
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      setError(err.message || "Failed to start documentation analysis.");
+      setError(err instanceof Error ? err.message : "Failed to start documentation analysis.");
       setShowErrorModal(true);
       setSubmitting(false);
     }
@@ -107,7 +109,6 @@ export default function AnalyzePage() {
   // Determine active steps for the visual progress stepper
   const getStepStatus = (stepIndex: number) => {
     if (!activeIntegration) return "pending";
-    const status = activeIntegration.status.toLowerCase();
     const progress = activeIntegration.progress;
 
     if (activeIntegration.status === "completed") return "completed";
@@ -415,7 +416,7 @@ export default function AnalyzePage() {
                 <ul className="list-disc pl-4 space-y-1 text-slate-400 text-[11px]">
                   <li>Verify that the URL exists and is typed correctly.</li>
                   <li>Check if the site requires a login, VPN, or custom credentials.</li>
-                  <li>Many websites (like Cloudflare, AWS WAF, etc.) block automated scrapers. Try a public mirror or check your site's access rules.</li>
+                  <li>Many websites (like Cloudflare, AWS WAF, etc.) block automated scrapers. Try a public mirror or check your site&apos;s access rules.</li>
                 </ul>
               </div>
             </CardContent>

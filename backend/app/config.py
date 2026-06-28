@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     
     # Scraping & Vector DB
     CHROMA_PERSIST_DIR: str = "./data/chroma"
-    MAX_CRAWL_PAGES: int = 5
+    MAX_CRAWL_PAGES: int = 2
     
     class Config:
         env_file = ".env"

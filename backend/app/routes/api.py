@@ -1,5 +1,6 @@
 import logging
 import json
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -77,17 +78,21 @@ async def analyze_api(payload: AnalyzeRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="No documentation content could be scraped from the provided URL.")
         
     # Create DB entry for tracking in the Dashboard UI
-    new_integration = Integration(
-        url=payload.url,
-        use_case=payload.use_case,
-        language=payload.language,
-        requires_subscription=payload.requires_subscription,
-        status="scraping",
-        progress=20
-    )
-    db.add(new_integration)
-    db.commit()
-    db.refresh(new_integration)
+    def sync_create_entry():
+        new_int = Integration(
+            url=payload.url,
+            use_case=payload.use_case,
+            language=payload.language,
+            requires_subscription=payload.requires_subscription,
+            status="scraping",
+            progress=20
+        )
+        db.add(new_int)
+        db.commit()
+        db.refresh(new_int)
+        return new_int
+
+    new_integration = await asyncio.to_thread(sync_create_entry)
     
     try:
         # 2. Extract Candidate Endpoints & Auth via Python Regex
@@ -97,27 +102,34 @@ async def analyze_api(payload: AnalyzeRequest, db: Session = Depends(get_db)):
         # Check if subscription required was detected from crawled pages
         is_sub_required = payload.requires_subscription or detected_auth.get("requires_subscription", False)
         if is_sub_required:
-            new_integration.requires_subscription = True
-            db.commit()
+            def sync_update_sub():
+                db.refresh(new_integration)
+                new_integration.requires_subscription = True
+                db.commit()
+            await asyncio.to_thread(sync_update_sub)
             
         # 3. Vectorize and index pages in ChromaDB
-        db.refresh(new_integration)
-        new_integration.status = "vectorizing"
-        new_integration.progress = 50
-        db.commit()
+        def sync_update_vectorizing():
+            db.refresh(new_integration)
+            new_integration.status = "vectorizing"
+            new_integration.progress = 50
+            db.commit()
+        await asyncio.to_thread(sync_update_vectorizing)
         
         try:
             rag = RAGPipeline()
-            rag.clear_integration_vectors(new_integration.id)
-            rag.process_and_store(new_integration.id, pages)
+            await asyncio.to_thread(rag.clear_integration_vectors, new_integration.id)
+            await asyncio.to_thread(rag.process_and_store, new_integration.id, pages)
         except Exception as rag_err:
             logger.warning(f"RAG Vectorization skipped/failed: {rag_err}. Proceeding with SDK generation.")
         
         # 4. Run generator with candidate context
-        db.refresh(new_integration)
-        new_integration.status = "generating"
-        new_integration.progress = 80
-        db.commit()
+        def sync_update_generating():
+            db.refresh(new_integration)
+            new_integration.status = "generating"
+            new_integration.progress = 80
+            db.commit()
+        await asyncio.to_thread(sync_update_generating)
         
         generator = APIIntegrationGenerator()
         results = await generator.generate_all(
@@ -129,17 +141,20 @@ async def analyze_api(payload: AnalyzeRequest, db: Session = Depends(get_db)):
         )
         
         # Update SQLite DB model
-        db.refresh(new_integration)
-        new_integration.auth_summary = results["auth_summary"]
-        new_integration.endpoints_json = results["endpoints_json"]
-        new_integration.sdk_recommendation = results["sdk_recommendation"]
-        new_integration.integration_steps = results["integration_steps"]
-        new_integration.generated_code = results["generated_code"]
-        new_integration.sample_requests = results["sample_requests"]
-        new_integration.sample_responses = results["sample_responses"]
-        new_integration.progress = 100
-        new_integration.status = "completed"
-        db.commit()
+        def sync_finalize():
+            db.refresh(new_integration)
+            new_integration.auth_summary = results["auth_summary"]
+            new_integration.endpoints_json = results["endpoints_json"]
+            new_integration.sdk_recommendation = results["sdk_recommendation"]
+            new_integration.integration_steps = results["integration_steps"]
+            new_integration.generated_code = results["generated_code"]
+            new_integration.sample_requests = results["sample_requests"]
+            new_integration.sample_responses = results["sample_responses"]
+            new_integration.progress = 100
+            new_integration.status = "completed"
+            db.commit()
+            db.refresh(new_integration)
+        await asyncio.to_thread(sync_finalize)
         
         # Format outputs for Response model
         endpoints_list = json.loads(results["endpoints_json"]) if results["endpoints_json"] else []
@@ -158,11 +173,13 @@ async def analyze_api(payload: AnalyzeRequest, db: Session = Depends(get_db)):
         
     except Exception as e:
         logger.exception(f"Error during API analysis pipeline: {e}")
-        db.refresh(new_integration)
-        new_integration.status = "failed"
-        new_integration.progress = 100
-        new_integration.error_message = str(e)
-        db.commit()
+        def sync_fail():
+            db.refresh(new_integration)
+            new_integration.status = "failed"
+            new_integration.progress = 100
+            new_integration.error_message = str(e)
+            db.commit()
+        await asyncio.to_thread(sync_fail)
         raise HTTPException(status_code=500, detail=f"API Analysis pipeline failed: {str(e)}")
 
 @router.post("/generate-sdk", response_model=GenerateSDKResponse)
@@ -176,7 +193,9 @@ async def generate_sdk(payload: GenerateSDKRequest, db: Session = Depends(get_db
     
     # Path A: Load from SQLite DB
     if payload.integration_id is not None:
-        integration = db.query(Integration).filter(Integration.id == payload.integration_id).first()
+        def sync_load_integration():
+            return db.query(Integration).filter(Integration.id == payload.integration_id).first()
+        integration = await asyncio.to_thread(sync_load_integration)
         if not integration:
             raise HTTPException(status_code=404, detail=f"Integration ID {payload.integration_id} not found.")
             

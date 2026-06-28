@@ -3,25 +3,17 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { 
-  Globe, 
-  Terminal, 
   Compass, 
   Search, 
-  ArrowRight, 
   AlertCircle, 
   Cpu, 
-  Layers, 
-  ShieldCheck, 
   Check, 
   Copy, 
-  ChevronRight,
-  Info,
-  Lock,
   ArrowLeft
 } from "lucide-react";
 import { getIntegration, Integration } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Parameter {
@@ -74,7 +66,7 @@ export default function ExplorerPage() {
             console.error("Failed to parse endpoints_json:", e);
           }
         }
-      } catch (err: any) {
+      } catch (err) {
         console.error(err);
         setError("Failed to load integration data.");
       } finally {
@@ -158,7 +150,7 @@ export default function ExplorerPage() {
     const cleanBase = integrationUrl.replace(/\/$/, "");
     const fullUrl = `${cleanBase}${endpoint.path}`;
     
-    let lines = [`curl -X ${method} "${fullUrl}"`];
+    const lines = [`curl -X ${method} "${fullUrl}"`];
     
     const headers = getRequiredHeaders(auth, method);
     headers.forEach((h, idx) => {

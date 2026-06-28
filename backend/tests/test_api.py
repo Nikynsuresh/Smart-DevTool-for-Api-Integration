@@ -77,3 +77,53 @@ def test_generate_sdk(mock_generate_wrapper):
     data = response.json()
     assert data["language"] == "typescript"
     assert "class NewLanguageClient" in data["wrapper_class"]
+
+def test_export_code_zip():
+    from app.database import SessionLocal
+    from app.models import Integration
+    import io
+    import zipfile
+    
+    db = SessionLocal()
+    dummy = Integration(
+        url="https://example.com/api-docs",
+        use_case="test usecase",
+        language="Python",
+        generated_code="class DummyClient:\n    def __init__(self):\n        pass",
+        integration_steps="1. Run dummy",
+        sample_requests="```python\nprint('requests')\n```",
+        sample_responses="```json\n{}\n```",
+        status="completed"
+    )
+    db.add(dummy)
+    db.commit()
+    db.refresh(dummy)
+    
+    try:
+        response = client.get(f"/integrations/{dummy.id}/export/code")
+        assert response.status_code == 200
+        assert response.headers["content-disposition"] == f"attachment; filename=sdk_client_{dummy.id}.zip"
+        assert response.headers["content-type"] == "application/zip"
+        
+        # Verify the ZIP contents
+        zip_file = zipfile.ZipFile(io.BytesIO(response.content))
+        file_list = zip_file.namelist()
+        assert "api_client.py" in file_list
+        assert "example.py" in file_list
+        assert "README.md" in file_list
+        
+        # Verify contents of files inside ZIP
+        readme = zip_file.read("README.md").decode("utf-8")
+        assert "example.py" in readme
+        assert "api_client.py" in readme
+        assert "1. Run dummy" in readme
+        
+        example = zip_file.read("example.py").decode("utf-8")
+        assert "print('requests')" in example
+        
+    finally:
+        # Clean up database
+        db.delete(dummy)
+        db.commit()
+        db.close()
+

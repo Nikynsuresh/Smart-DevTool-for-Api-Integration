@@ -143,12 +143,12 @@ export default function LandingPage() {
                   <p className="text-slate-500"># Production-ready client wrapper with backoff retries</p>
                   <p><span className="text-violet-400">class</span> <span className="text-amber-300 font-semibold">StripeClient</span>:</p>
                   <p>&nbsp;&nbsp;&nbsp;&nbsp;<span className="text-violet-400">def</span> <span className="text-sky-300">__init__</span>(self, api_key: str = None):</p>
-                  <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.api_key = api_key or os.getenv(<span className="text-emerald-300">"STRIPE_API_KEY"</span>)</p>
-                  <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.base_url = <span className="text-emerald-300">"https://api.stripe.com"</span></p>
-                  <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.client = httpx.Client(headers={"{"}<span className="text-emerald-300">"Authorization"</span>: f<span className="text-emerald-300">"Bearer {"{"}self.api_key{"}"}"</span>{"}"})</p>
+                  <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.api_key = api_key or os.getenv(<span className="text-emerald-300">&quot;STRIPE_API_KEY&quot;</span>)</p>
+                  <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.base_url = <span className="text-emerald-300">&quot;https://api.stripe.com&quot;</span></p>
+                  <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.client = httpx.Client(headers={"{"}<span className="text-emerald-300">&quot;Authorization&quot;</span>: f<span className="text-emerald-300">&quot;Bearer {"{"}self.api_key{"}"}&quot;</span>{"}"})</p>
                   <br />
-                  <p>&nbsp;&nbsp;&nbsp;&nbsp;<span className="text-violet-400">def</span> <span className="text-sky-300">create_charge</span>(self, amount: int, currency: str = <span className="text-emerald-300">"usd"</span>):</p>
-                  <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;response = self.client.post(f<span className="text-emerald-300">"{"{"}self.base_url{"}"}/v1/charges"</span>, data=...)</p>
+                  <p>&nbsp;&nbsp;&nbsp;&nbsp;<span className="text-violet-400">def</span> <span className="text-sky-300">create_charge</span>(self, amount: int, currency: str = <span className="text-emerald-300">&quot;usd&quot;</span>):</p>
+                  <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;response = self.client.post(f<span className="text-emerald-300">&quot;{"{"}self.base_url{"}"}/v1/charges&quot;</span>, data=...)</p>
                   <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span className="text-pink-500">return</span> response.json()</p>
                 </div>
                 <div className="absolute bottom-3 right-3 h-7 px-3 bg-indigo-600 text-white rounded-lg flex items-center gap-1.5 shadow-md shadow-indigo-500/20 text-[10px] font-bold">

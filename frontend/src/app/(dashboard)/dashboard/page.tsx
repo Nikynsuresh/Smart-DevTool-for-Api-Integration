@@ -25,26 +25,36 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
 
   // Load integrations from backend
-  async function loadData() {
-    try {
-      const data = await listIntegrations();
-      setIntegrations(data);
-      setError(null);
-    } catch (err: any) {
-      console.error(err);
-      setError("Failed to connect to FastAPI backend. Make sure the backend server is running on port 8000.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
+    let active = true;
+    async function loadData() {
+      try {
+        const data = await listIntegrations();
+        if (active) {
+          setIntegrations(data);
+          setError(null);
+        }
+      } catch (err) {
+        console.error(err);
+        if (active) {
+          setError("Failed to connect to FastAPI backend. Make sure the backend server is running on port 8000.");
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    }
+
     loadData();
     // Poll integrations list every 3.5 seconds to dynamically update progress of background crawlers
     const timer = setInterval(() => {
       loadData();
     }, 3500);
-    return () => clearInterval(timer);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
   }, []);
 
   const handleDelete = async (id: number, e: React.MouseEvent) => {
@@ -53,7 +63,7 @@ export default function Dashboard() {
     try {
       await deleteIntegration(id);
       setIntegrations(prev => prev.filter(item => item.id !== id));
-    } catch (err) {
+    } catch {
       alert("Failed to delete integration.");
     }
   };
